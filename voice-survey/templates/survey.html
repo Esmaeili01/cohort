@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>نظرسنجی صوتی</title>
+    <title>فرم سابقه کاری</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
 </head>
@@ -12,7 +12,7 @@
         <div class="row">
             <div class="col-12">
                 <div class="bg-primary text-white text-center py-3 rounded mb-4">
-                    <h1><i class="bi bi-mic-fill me-2"></i>نظرسنجی صوتی</h1>
+                    <h1><i class="bi bi-mic-fill me-2"></i>فرم سابقه کاری</h1>
                 </div>
             </div>
         </div>
@@ -116,10 +116,10 @@
                     </div>
                     
                     <div class="mt-3">
-                        <button type="button" class="btn btn-success" id="confirmBtn2" onclick="showQuestion3()" disabled>
+                        <button type="button" class="btn btn-success" id="confirmBtn2" onclick="processQuestion2()" disabled>
                             <i class="bi bi-check me-1"></i>ادامه
                         </button>
-                        <span id="status2" class="badge bg-secondary ms-2" style="display: none;">تأیید شد</span>
+                        <span id="status2" class="badge bg-secondary ms-2" style="display: none;">تأید شد</span>
                     </div>
                 </div>
             </div>
@@ -169,10 +169,10 @@
                     </div>
                     
                     <div class="mt-3">
-                        <button type="button" class="btn btn-success" id="confirmBtn3" onclick="enableSubmit()" disabled>
+                        <button type="button" class="btn btn-success" id="confirmBtn3" onclick="processQuestion3()" disabled>
                             <i class="bi bi-check me-1"></i>اتمام
                         </button>
-                        <span id="status3" class="badge bg-secondary ms-2" style="display: none;">تأیید شد</span>
+                        <span id="status3" class="badge bg-secondary ms-2" style="display: none;">تأید شد</span>
                     </div>
                 </div>
             </div>
@@ -181,7 +181,7 @@
             <div id="notEmployed" class="alert alert-info text-center" style="display: none;">
                 <h5><i class="bi bi-info-circle me-2"></i>متشکریم!</h5>
                 <p>از شما بابت پاسخ‌تان متشکریم. چون شاغل نیستید، سوالات بعدی مربوط به شما نمی‌شود.</p>
-                <button type="button" class="btn btn-primary" onclick="enableSubmit()">
+                <button type="button" class="btn btn-primary" onclick="enableSubmitForUnemployed()">
                     <i class="bi bi-check me-1"></i>اتمام نظرسنجی
                 </button>
             </div>
@@ -375,7 +375,7 @@
             }
         }
         
-        async function showQuestion3() {
+        async function processQuestion2() {
             const textAnswer = document.getElementById('answer2').value.trim();
             const audioFile = document.getElementById('audioFile2').files[0];
             
@@ -442,7 +442,7 @@
             }
         }
         
-        async function enableSubmit() {
+        async function processQuestion3() {
             const textAnswer = document.getElementById('answer3').value.trim();
             const audioFile = document.getElementById('audioFile3').files[0];
             
@@ -481,15 +481,18 @@
                     // Store the processed data
                     window.question3Data = result;
                     
-                    // Show processed result
+                    // Show processed result (this handles validation errors internally)
                     showProcessedResult(3, result);
                     
-                    // Mark question 3 as completed
-                    confirmBtn.style.display = 'none';
-                    document.getElementById('status3').style.display = 'inline-block';
-                    
-                    // Show submit button
-                    document.getElementById('submitSection').style.display = 'block';
+                    // Only proceed if no validation errors
+                    if (!result.needs_reentry) {
+                        // Mark question 3 as completed
+                        confirmBtn.style.display = 'none';
+                        document.getElementById('status3').style.display = 'inline-block';
+                        
+                        // Show submit button
+                        document.getElementById('submitSection').style.display = 'block';
+                    }
                 } else {
                     throw new Error(result.error || 'Processing failed');
                 }
@@ -511,15 +514,31 @@
             
             if (!questionCard) return;
             
+            // Remove any existing validation error displays first
+            const existingError = questionCard.querySelector('.validation-error');
+            if (existingError) {
+                existingError.remove();
+            }
+            
+            // Check for validation errors
+            if (result.needs_reentry && result.validation_errors && result.validation_errors.length > 0) {
+                // Show validation errors with re-record options
+                showValidationError(questionNum, result.validation_errors);
+                return; // Don't show processed result if there are validation errors
+            }
+            
+            // Hide input sections and confirm button when showing results
+            hideInputSections(questionNum);
+            
             // Create or update result display
             let resultDiv = questionCard.querySelector('.processed-result');
             if (!resultDiv) {
                 resultDiv = document.createElement('div');
-                resultDiv.className = 'processed-result alert alert-info mt-3';
+                resultDiv.className = 'processed-result alert alert-success mt-3';
                 questionCard.querySelector('.card-body').appendChild(resultDiv);
             }
             
-            let html = '<h6><i class="bi bi-robot me-2"></i>نتیجه پردازش هوش مصنوعی:</h6>';
+            let html = '<h6><i class="bi bi-check-circle me-2"></i>نتیجه پردازش هوش مصنوعی:</h6>';
             
             if (result.transcription) {
                 html += `<p><strong>متن ضبط شده:</strong> ${result.transcription}</p>`;
@@ -537,7 +556,257 @@
                 html += '</ul>';
             }
             
+            // Add edit button
+            html += `
+                <div class="mt-3 text-center">
+                    <button class="btn btn-outline-secondary btn-sm" onclick="editAnswer(${questionNum})">
+                        <i class="bi bi-pencil-square me-1"></i>ویرایش پاسخ
+                    </button>
+                </div>
+            `;
+            
             resultDiv.innerHTML = html;
+        }
+        
+        // Function to hide input sections when showing results
+        function hideInputSections(questionNum) {
+            const questionCard = document.getElementById(`question${questionNum}`);
+            if (!questionCard) return;
+            
+            // Hide tabs
+            const tabs = questionCard.querySelector('.nav-tabs');
+            if (tabs) tabs.style.display = 'none';
+            
+            // Hide input methods
+            const textInput = document.getElementById(`textInput${questionNum}`);
+            const voiceInput = document.getElementById(`voiceInput${questionNum}`);
+            if (textInput) textInput.style.display = 'none';
+            if (voiceInput) voiceInput.style.display = 'none';
+            
+            // Hide confirm button and status
+            const confirmBtn = document.getElementById(`confirmBtn${questionNum}`);
+            const status = document.getElementById(`status${questionNum}`);
+            if (confirmBtn) confirmBtn.style.display = 'none';
+            if (status) status.style.display = 'none';
+        }
+        
+        // Function to show input sections when editing
+        function showInputSections(questionNum) {
+            const questionCard = document.getElementById(`question${questionNum}`);
+            if (!questionCard) return;
+            
+            // Show tabs
+            const tabs = questionCard.querySelector('.nav-tabs');
+            if (tabs) tabs.style.display = 'flex';
+            
+            // Show current input method (default to text)
+            const textInput = document.getElementById(`textInput${questionNum}`);
+            const voiceInput = document.getElementById(`voiceInput${questionNum}`);
+            const textTab = document.getElementById(`textTab${questionNum}`);
+            const voiceTab = document.getElementById(`voiceTab${questionNum}`);
+            
+            if (textInput && textTab) {
+                textInput.style.display = 'block';
+                voiceInput.style.display = 'none';
+                textTab.classList.add('active');
+                voiceTab.classList.remove('active');
+            }
+            
+            // Show confirm button with correct text
+            const confirmBtn = document.getElementById(`confirmBtn${questionNum}`);
+            if (confirmBtn) {
+                confirmBtn.style.display = 'inline-block';
+                confirmBtn.disabled = false;
+                
+                // Set correct button text based on question number
+                if (questionNum === 1 || questionNum === 2) {
+                    confirmBtn.innerHTML = '<i class="bi bi-check me-1"></i>ادامه';
+                } else if (questionNum === 3) {
+                    confirmBtn.innerHTML = '<i class="bi bi-check me-1"></i>اتمام';
+                }
+            }
+        }
+        
+        // Function to edit answer
+        function editAnswer(questionNum) {
+            const questionCard = document.getElementById(`question${questionNum}`);
+            if (!questionCard) return;
+            
+            // Remove processed result display
+            const resultDiv = questionCard.querySelector('.processed-result');
+            if (resultDiv) {
+                resultDiv.remove();
+            }
+            
+            // Show input sections again
+            showInputSections(questionNum);
+            
+            // Restore original confirm button text and onclick
+            const confirmBtn = document.getElementById(`confirmBtn${questionNum}`);
+            if (confirmBtn) {
+                if (questionNum === 1) {
+                    confirmBtn.innerHTML = '<i class="bi bi-check me-1"></i>ادامه';
+                    confirmBtn.onclick = () => processQuestion1();
+                } else if (questionNum === 2) {
+                    confirmBtn.innerHTML = '<i class="bi bi-check me-1"></i>ادامه';
+                    confirmBtn.onclick = () => processQuestion2();
+                } else if (questionNum === 3) {
+                    confirmBtn.innerHTML = '<i class="bi bi-check me-1"></i>اتمام';
+                    confirmBtn.onclick = () => processQuestion3();
+                }
+            }
+            
+            // Clear previous data
+            if (questionNum === 1 && window.question1Data) {
+                delete window.question1Data;
+                // Hide subsequent questions when editing question 1
+                document.getElementById('question2').style.display = 'none';
+                document.getElementById('question3').style.display = 'none';
+                document.getElementById('notEmployed').style.display = 'none';
+                document.getElementById('submitSection').style.display = 'none';
+            } else if (questionNum === 2 && window.question2Data) {
+                delete window.question2Data;
+                // Hide question 3 when editing question 2
+                document.getElementById('question3').style.display = 'none';
+                document.getElementById('submitSection').style.display = 'none';
+            } else if (questionNum === 3 && window.question3Data) {
+                delete window.question3Data;
+                // Hide submit section when editing question 3
+                document.getElementById('submitSection').style.display = 'none';
+            }
+            
+            // Reset status indicators
+            const status = document.getElementById(`status${questionNum}`);
+            if (status) status.style.display = 'none';
+            
+            // Focus on text input
+            const textAnswer = document.getElementById(`answer${questionNum}`);
+            if (textAnswer) {
+                textAnswer.focus();
+            }
+        }
+        
+        // Function to show validation errors with re-record options
+        function showValidationError(questionNum, errors) {
+            const questionCard = document.getElementById(`question${questionNum}`);
+            if (!questionCard) return;
+            
+            // Create validation error display
+            let errorDiv = questionCard.querySelector('.validation-error');
+            if (!errorDiv) {
+                errorDiv = document.createElement('div');
+                errorDiv.className = 'validation-error alert alert-warning mt-3';
+                questionCard.querySelector('.card-body').appendChild(errorDiv);
+            }
+            
+            let html = '<h6><i class="bi bi-exclamation-triangle me-2"></i>خطا در پردازش:</h6>';
+            
+            errors.forEach(error => {
+                html += `<p class="mb-2">• ${error}</p>`;
+            });
+            
+            html += `
+                <div class="mt-3">
+                    <button class="btn btn-warning btn-sm" onclick="enableReEntry(${questionNum})">
+                        <i class="bi bi-pencil me-1"></i>ویرایش پاسخ متنی
+                    </button>
+                    <button class="btn btn-danger btn-sm ms-2" onclick="enableReRecord(${questionNum})">
+                        <i class="bi bi-mic me-1"></i>ضبط مجدد صوتی
+                    </button>
+                </div>
+            `;
+            
+            errorDiv.innerHTML = html;
+            
+            // Reset confirm button with correct text
+            const confirmBtn = document.getElementById(`confirmBtn${questionNum}`);
+            if (confirmBtn) {
+                confirmBtn.style.display = 'inline-block';
+                confirmBtn.disabled = false;
+                
+                // Set correct button text based on question number
+                if (questionNum === 1 || questionNum === 2) {
+                    confirmBtn.innerHTML = '<i class="bi bi-check me-1"></i>ادامه';
+                } else if (questionNum === 3) {
+                    confirmBtn.innerHTML = '<i class="bi bi-check me-1"></i>اتمام';
+                }
+            }
+        }
+        
+        // Function to enable text re-entry
+        function enableReEntry(questionNum) {
+            // Remove validation error display
+            const questionCard = document.getElementById(`question${questionNum}`);
+            const errorDiv = questionCard.querySelector('.validation-error');
+            if (errorDiv) {
+                errorDiv.remove();
+            }
+            
+            // Remove processed result display
+            const resultDiv = questionCard.querySelector('.processed-result');
+            if (resultDiv) {
+                resultDiv.remove();
+            }
+            
+            // Show input sections
+            showInputSections(questionNum);
+            
+            // Switch to text input method
+            switchInputMethod(questionNum, 'text');
+            
+            // Clear previous answer
+            const textInput = document.getElementById(`answer${questionNum}`);
+            if (textInput) {
+                textInput.value = '';
+                textInput.focus();
+            }
+        }
+        
+        // Function to enable voice re-recording
+        function enableReRecord(questionNum) {
+            // Remove validation error display
+            const questionCard = document.getElementById(`question${questionNum}`);
+            const errorDiv = questionCard.querySelector('.validation-error');
+            if (errorDiv) {
+                errorDiv.remove();
+            }
+            
+            // Remove processed result display
+            const resultDiv = questionCard.querySelector('.processed-result');
+            if (resultDiv) {
+                resultDiv.remove();
+            }
+            
+            // Show input sections
+            showInputSections(questionNum);
+            
+            // Switch to voice input method
+            switchInputMethod(questionNum, 'voice');
+            
+            // Clear previous recording
+            const audioFile = document.getElementById(`audioFile${questionNum}`);
+            const audioPreview = document.getElementById(`audioPreview${questionNum}`);
+            
+            if (audioFile) {
+                audioFile.value = '';
+            }
+            if (audioPreview) {
+                audioPreview.style.display = 'none';
+                audioPreview.src = '';
+            }
+            
+            // Reset record button state
+            const recordBtn = document.getElementById(`recordBtn${questionNum}`);
+            if (recordBtn) {
+                recordBtn.classList.remove('btn-danger');
+                recordBtn.classList.add('btn-primary');
+                recordBtn.querySelector('.record-text').textContent = 'شروع ضبط';
+            }
+        }
+        
+        // Function to enable submit for unemployed users
+        function enableSubmitForUnemployed() {
+            document.getElementById('submitSection').style.display = 'block';
         }
         
         // Handle form submission

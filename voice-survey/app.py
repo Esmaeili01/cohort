@@ -95,9 +95,26 @@ def extract_structured_data_with_gemini(question, answer_text):
             سوال: {question}
             پاسخ: {answer_text}
             
-            لطفاً نام شغل را از پاسخ استخراج کنید و به صورت مختصر و واضح بنویسید.
-            مثال: مهندس، معلم، پزشک، فروشنده، و غیره
-            فقط نام شغل را بنویسید.
+            لطفاً نام شغل را از پاسخ استخراج کنید.
+            
+            مهم: فقط اگر پاسخ واقعاً حاوی نام شغل است، آن را استخراج کنید.
+            
+            شغل‌های معتبر:
+            • مهندس (نرم‌افزار، عمران، برق و ...)
+            • پزشک، دندانپزشک، پرستار
+            • معلم، استاد، آموزگار
+            • فروشنده، کارمند فروش
+            • آشپز، سرآشپز
+            • راننده، تاکسی‌ران
+            • کارگر، کارگر ساختمان
+            • وکیل، قاضی
+            • حسابدار، مالیاتچی
+            • بازیگر، هنرمند
+            • نویسنده، روزنامه‌نگار
+            
+            اگر پاسخ معنادار نیست، غیرمرتبط است، یا نام شغل مشخصی ندارد، بنویسید: "نامشخص"
+            
+            پاسخ فقط با یک کلمه یا عبارت کوتاه (حداکثر ۵ کلمه)، بدون توضیح اضافی.
             """
             
         elif "چه سنی" in question:
@@ -105,12 +122,19 @@ def extract_structured_data_with_gemini(question, answer_text):
             سوال: {question}
             پاسخ: {answer_text}
             
-            لطفاً از پاسخ، سن شروع کار و سن فعلی یا سن پایان کار را استخراج کنید.
+            لطفاً از پاسخ، سن شروع کار و سن پایان کار را استخراج کنید.
+            
+            مهم: هردو سن باید عدد باشند. فقط اگر فرد هیچ سن پایانی نگفته و فقط گفته "تا الان" یا "هنوز شاغلم"، آنگاه "فعلی" بنویس.
+            
+            مثال‌های مهم:
+            • "از ۱۸ تا ۲۳ که الان هستم" → سن شروع: 18, سن پایان: 23
+            • "از ۲۰ سالگی تا ۳۵ سالگی" → سن شروع: 20, سن پایان: 35
+            • "از ۲۵ سالگی تا الان" → سن شروع: 25, سن پایان: فعلی
+            • "از بیست و دو سالگی تا بیست و هشت سالگی" → سن شروع: 22, سن پایان: 28
+            
             پاسخ را به این فرمت بدهید:
             سن شروع: [عدد]
             سن پایان: [عدد یا فعلی]
-            
-            اگر سن پایان مشخص نیست، "فعلی" بنویسید.
             """
         
         response = model.generate_content(prompt)
@@ -124,6 +148,88 @@ def extract_structured_data_with_gemini(question, answer_text):
 def index():
     """Main survey page"""
     return render_template('survey.html', questions=QUESTIONS)
+
+def validate_age_data(from_age, to_age):
+    """Validate that age data contains valid numbers."""
+    errors = []
+    
+    # Check if from_age is a valid number
+    if from_age is None:
+        errors.append("سن شروع کار مشخص نیست. لطفا مجددا با ذکر سن دقیق پاسخ دهید.")
+        return False, errors
+    
+    try:
+        from_age_num = int(from_age)
+        if from_age_num < 10 or from_age_num > 100:
+            errors.append("سن شروع کار باید بین ۱۰ تا ۱۰۰ سال باشد. لطفا مجددا پاسخ دهید.")
+            return False, errors
+    except (ValueError, TypeError):
+        errors.append("سن شروع کار باید عدد باشد. لطفا مجددا با ذکر سن دقیق پاسخ دهید.")
+        return False, errors
+    
+    # Check if to_age is valid (number or "فعلی" or "current")
+    if to_age is None:
+        errors.append("سن پایان کار مشخص نیست. لطفا مجددا پاسخ دهید و سن دقیق را ذکر کنید.")
+        return False, errors
+    
+    # Accept "فعلی" or "current" as valid (for currently employed)
+    if to_age in ["فعلی", "current"]:
+        return True, []
+    
+    # Otherwise, to_age must be a valid number
+    try:
+        to_age_num = int(to_age)
+        if to_age_num < 10 or to_age_num > 100:
+            errors.append("سن پایان کار باید بین ۱۰ تا ۱۰۰ سال باشد. اگر هنوز شاغل هستید، 'تا الان' بگویید نه سن فعلی.")
+            return False, errors
+        if to_age_num <= from_age_num:
+            errors.append("سن پایان کار باید از سن شروع کار بیشتر باشد. لطفا مجددا پاسخ دهید.")
+            return False, errors
+    except (ValueError, TypeError):
+        errors.append("سن پایان کار باید عدد باشد. اگر هنوز شاغل هستید 'تا الان' بگویید نه سن فعلی.")
+        return False, errors
+    
+    return True, []
+
+def validate_job_title(job_title):
+    """Validate that the job title is actually a real job title."""
+    if not job_title or job_title.strip() in ["نامشخص", "نامعلوم", "نمی‌دانم", ""]:
+        return False, ["نام شغل مشخص نیست. لطفا نام شغل واقعی خود را بنویسید."]
+    
+    job_title_clean = job_title.strip()
+    job_title_lower = job_title_clean.lower()
+    
+    # Common nonsense words/patterns in Persian
+    nonsense_words = [
+        "هیچی", "هیچ", "بلبل", "قارقار", "جیغجیغ", "کیکیریکی",
+        "آهآه", "اوهاوه", "خخخ", "ههه", "ااا", "اواو",
+        "test", "testing", "hello", "hi", "abc", "xyz", "asdf", "qwerty"
+    ]
+    
+    # Check if it's a nonsense word
+    if job_title_lower in nonsense_words:
+        return False, ["پاسخ شما به عنوان شغل مناسب نیست. لطفا نام شغل واقعی خود را بنویسید."]
+    
+    # Nonsense pattern indicators
+    nonsense_patterns = [
+        # Too short (less than 2 characters)
+        len(job_title_clean) < 2,
+        # Too long (more than 50 characters)
+        len(job_title_clean) > 50,
+        # Too many numbers (more than 30% of content)
+        len([c for c in job_title_clean if c.isdigit()]) > len(job_title_clean) * 0.3,
+        # Contains too many special characters (more than 30% of content)
+        len([c for c in job_title_clean if not (c.isalnum() or c.isspace() or c in 'ابپتثجچحخدذرزژسشصضطظعغفقکگلمنوهی‌ـ')]) > len(job_title_clean) * 0.3,
+        # Mostly English characters (more than 70% Latin chars)
+        len([c for c in job_title_clean if 'a' <= c.lower() <= 'z']) > len(job_title_clean) * 0.7,
+        # Repeating characters (like "aaaaaa" or "مممم")
+        any(job_title_clean.count(char) > len(job_title_clean) * 0.5 for char in set(job_title_clean) if char.isalnum()),
+    ]
+    
+    if any(nonsense_patterns):
+        return False, ["پاسخ شما به عنوان شغل مناسب نیست. لطفا نام شغل واقعی خود را بنویسید (مثل: مهندس، پزشک، معلم، فروشنده)."]
+    
+    return True, []
 
 def parse_structured_response(question, structured_answer):
     """Parse structured response into database format"""
@@ -200,12 +306,32 @@ def process_question():
         # Parse structured data
         parsed_data = parse_structured_response(question_text, structured_answer)
         
+        # Validate data based on question type
+        validation_errors = []
+        
+        # Validate age data if this is the age question
+        if "چه سنی" in question_text and parsed_data:
+            from_age = parsed_data.get('from_age')
+            to_age = parsed_data.get('to_age')
+            is_valid, errors = validate_age_data(from_age, to_age)
+            if not is_valid:
+                validation_errors = errors
+        
+        # Validate job title if this is the job question
+        elif "شغل شما چیست" in question_text and parsed_data:
+            job_title = parsed_data.get('job_title')
+            is_valid, errors = validate_job_title(job_title)
+            if not is_valid:
+                validation_errors = errors
+        
         response_data = {
             'success': True,
             'original_answer': final_answer,
             'processed_answer': structured_answer,
             'structured_data': parsed_data,
-            'transcription': transcription
+            'transcription': transcription,
+            'validation_errors': validation_errors,
+            'needs_reentry': len(validation_errors) > 0
         }
         
         return jsonify(response_data)
