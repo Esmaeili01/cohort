@@ -4,7 +4,7 @@
 
 1. **Install dependencies**
    ```bash
-   pip install flask google-generativeai werkzeug
+   pip install -r requirements.txt
    ```
 
 2. **Set API key**
